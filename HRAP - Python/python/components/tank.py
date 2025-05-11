@@ -20,15 +20,12 @@ class OxidizerTank:
     def get_pressure_change(self, state:SimulationState) -> float:
         """
         Get the change in pressure in the tank
-        :param state:
+        :param state: float
         :return:
         """
-        # dP = x.P_tnk - x.P_cmbr;
-        # if dP < 0
-        #     dP = 0;
-        # end
         return max(0.0, state.get_tank_pressure() - state.get_chamber_pressure())
 
+    # TODO: check if my interpretation of the the "Mcc" variable is accurate
     def get_mass_combustion_chamber(self, state:SimulationState) -> float:
         """
         Get mass in the combustion chamber
@@ -51,11 +48,7 @@ class OxidizerTank:
         #
         return min(1.0, m_cc)
 
-    def get_tank_pressure(self, state:SimulationState):
-        return state.get_tank_pressure()
-
-
-# not sure about this one
+    # TODO: check if my interpretation of the the "Matm" variable is accurate
     def get_mass_atmosphere(self, simulation:Simulation, state:SimulationState) -> float:
         """
         Get mass discharged into the atmosphere?
@@ -92,15 +85,15 @@ class OxidizerTank:
         return self.mass_discharged_rate
 
     # need more context about what each vent state is
-    def get_vent_state(self, simulation:Simulation) -> int:
-        return simulation.get_vent_state() #simulation.vent_state [0,1,2]
+    def get_vent_state(self, state:SimulationState) -> SimulationState.VentState:
+        return state.get_vent_state() #simulation.vent_state [0,1,2]
 
     # mdot? # mD?
     def update_mass_flow_and_discharge_rates(self, simulation:Simulation, state:SimulationState, motor:MotorProperties):
         # if s.tburn == 0 | | t <= s.tburn
         if motor.get_burn_time() == 0 or not simulation.is_time_maxed():
             # if s.vnt_S == 0
-            if self.get_vent_state(simulation) == simulation.VENT_STATE_ZERO:
+            if self.get_vent_state(state) == state.VentState.VENT_STATE_ZERO:
                 # x.mdot_v = 0;
                 state.set_mass_flow_rate_vent(0)
                 # if x.mLiq_new == 0
@@ -114,7 +107,7 @@ class OxidizerTank:
                 else:
                     state.set_mass_flow_output(0) # TODO write the math lol
                 self.set_mass_discharge_rate((state.get_mass_flow_output() + state.get_mass_flow_vent()) * simulation.get_time_delta())
-            elif self.get_vent_state(simulation) == simulation.VENT_STATE_ONE:
+            elif self.get_vent_state(state) == state.VentState.VENT_STATE_ONE:
                 # # 1.31 is the specific heat ratio of nitrous oxide and 188.91 is the gas constant for nitrous. The 0.31 is just 1.31-1 or gamma-1 which is a fairly common term in the thermo models, 2.31 is the same just gamma+1. 0.62 is I believe 2*gamma-2.
                 # x.mdot_v = (s.vnt_CdA * x.P_tnk / sqrt(x.T_tnk)) * sqrt(1.31 / (x.ox_props.Z * 188.91)) * Matm * (
                 #             1 + (0.31) / 2 * Matm ^ 2) ^ (-2.31 / 0.62);
@@ -131,7 +124,7 @@ class OxidizerTank:
                     state.set_mass_flow_output(0)  # TODO write the math lol
                 # mD = (x.mdot_o + x.mdot_v) * dt;
                 self.set_mass_discharge_rate((state.get_mass_flow_output() + state.get_mass_flow_vent()) * simulation.get_time_delta())
-            elif self.get_vent_state(simulation) == simulation.VENT_STATE_TWO:
+            elif self.get_vent_state(state) == state.VentState.VENT_STATE_TWO:
                 # x.mdot_v = (s.vnt_CdA * x.P_tnk / sqrt(x.T_tnk)) * sqrt(1.31 / (x.ox_props.Z * 188.91)) * Matm * (
                 #                     1 + (0.31) / 2 * Matm ^ 2) ^ (-2.31 / 0.62);
                 state.set_mass_flow_rate_vent(0) # TODO add the math
@@ -148,7 +141,7 @@ class OxidizerTank:
                 #         mD = x.mdot_o * dt;
                 self.set_mass_discharge_rate((state.get_mass_flow_output() + state.get_mass_flow_vent()) * simulation.get_time_delta())
             else:
-                raise RuntimeError(f"Invalid vent state [{self.get_vent_state(simulation)}]")
+                raise RuntimeError(f"Invalid vent state [{self.get_vent_state(state)}]")
         else:
             # x.mdot_o = 0;
             # mD = 0;
@@ -249,3 +242,6 @@ end
 
     def get_oxidizer(self):
         return self.oxidizer
+
+    def get_tank_pressure(self, state:SimulationState):
+        return state.get_tank_pressure()

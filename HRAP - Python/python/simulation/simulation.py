@@ -1,17 +1,13 @@
 
 from ..components.sim_config import SimulationConfiguration
 from ..components.motor import MotorProperties
-from ..components.oxidizer import GenericOxidizer
+from typing import Final
 
 class Simulation:
     """
     Simulation()
     Provides interfaces with the simulation for looping, iterating, and loading config
     """
-    VENT_STATE_ZERO = 0
-    VENT_STATE_ONE = 1
-    VENT_STATE_TWO = 2
-    VENT_STATE_UNKNOWN = -1
 
     config = None
     motor_properties = None
@@ -19,7 +15,6 @@ class Simulation:
     i = 0
     time = 0
     end_condition = None
-    vent_state = VENT_STATE_UNKNOWN
 
     def __init__(self, config:SimulationConfiguration, motor_properties:MotorProperties):
         self.set_simulation_config(config)
@@ -102,9 +97,6 @@ class Simulation:
     def get_current_time(self) -> float:
         return self.time
 
-    def get_vent_state(self) -> int:
-        return self.vent_state
-
     def set_vent_state(self, vent_state:int):
         self.vent_state = vent_state
 
@@ -113,6 +105,20 @@ class SimulationState:
     """
     Holds the state of each iteration in the sim (basically 'x' from the matlab code)
     """
+    class VentState:
+        # Todo: get more information about what each vent state represents in context
+        VENT_STATE_ZERO:Final[int] = 0
+        VENT_STATE_ONE:Final[int] = 1
+        VENT_STATE_TWO:Final[int] = 2
+        VENT_STATE_UNKNOWN:Final[int] = -1
+
+    vent_state:VentState = VentState.VENT_STATE_UNKNOWN
+
+    def get_vent_state(self) -> VentState:
+        return self.vent_state
+
+    def set_vent_state(self, state:VentState):
+        self.vent_state = state
 
     def get_mass_discharged(self) -> float:
         return 0
