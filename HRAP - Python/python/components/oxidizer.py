@@ -18,6 +18,7 @@ class GenericOxidizer:
     rhoc: float                         = 0
     R: float                            = 0
 
+    # Curve information about the oxidizer
     VAPOR_PRESSURE_COEFFICIENTS: list           = []
     LIQUID_DENSITY_COEFFICIENTS: list           = []
     VAPOR_DENSITY_COEFFICIENTS: list            = []
@@ -90,8 +91,7 @@ class GenericOxidizer:
         """
         assert len(self.LIQUID_ENTHALPY_COEFFICIENTS) == len(self.VAPOR_ENTHALPY_COEFFICIENTS)
         assert len(self.LIQUID_ENTHALPY_COEFFICIENTS) == len(self.ENTHALPY_EXPONENTS)
-        return sum((self.LIQUID_ENTHALPY_COEFFICIENTS[0] - self.VAPOR_ENTHALPY_COEFFICIENTS[0])
-            (self.LIQUID_ENTHALPY_COEFFICIENTS[index] - self.VAPOR_ENTHALPY_COEFFICIENTS[index]) *
+        return sum((self.LIQUID_ENTHALPY_COEFFICIENTS[index] - self.VAPOR_ENTHALPY_COEFFICIENTS[index]) *
                 math.pow(1 - (tank.get_temperature(state) / self.Tc), self.ENTHALPY_EXPONENTS[index])
                    for index in range(len(self.LIQUID_ENTHALPY_COEFFICIENTS))
         )
