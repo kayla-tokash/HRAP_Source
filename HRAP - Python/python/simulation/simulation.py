@@ -16,6 +16,10 @@ class Simulation:
     time = 0
     end_condition = None
 
+    # TODO find where these are defined in the matlab code and get more context about their variable names
+    inj_CdA = 0
+    inj_N = 0
+
     def __init__(self, config:SimulationConfiguration, motor_properties:MotorProperties):
         self.set_simulation_config(config)
         self.set_motor_properties(motor_properties)
@@ -112,12 +116,12 @@ class SimulationState:
         VENT_STATE_TWO:Final[int] = 2
         VENT_STATE_UNKNOWN:Final[int] = -1
 
-    vent_state:VentState = VentState.VENT_STATE_UNKNOWN
+    vent_state = VentState.VENT_STATE_UNKNOWN
 
-    def get_vent_state(self) -> VentState:
+    def get_vent_state(self) -> int:
         return self.vent_state
 
-    def set_vent_state(self, state:VentState):
+    def set_vent_state(self, state:int):
         self.vent_state = state
 
     def get_mass_discharged(self) -> float:

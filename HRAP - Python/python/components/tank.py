@@ -85,28 +85,30 @@ class OxidizerTank:
         return self.mass_discharged_rate
 
     # need more context about what each vent state is
-    def get_vent_state(self, state:SimulationState) -> SimulationState.VentState:
-        return state.get_vent_state() #simulation.vent_state [0,1,2]
+    def get_vent_state(self, state:SimulationState) -> int:
+        return state.get_vent_state() #state.vent_state [0,1,2]
 
     # mdot? # mD?
     def update_mass_flow_and_discharge_rates(self, simulation:Simulation, state:SimulationState, motor:MotorProperties):
-        # if s.tburn == 0 | | t <= s.tburn
         if motor.get_burn_time() == 0 or not simulation.is_time_maxed():
-            # if s.vnt_S == 0
             if self.get_vent_state(state) == state.VentState.VENT_STATE_ZERO:
-                # x.mdot_v = 0;
                 state.set_mass_flow_rate_vent(0)
-                # if x.mLiq_new == 0
-                #     x.mdot_o = (s.inj_CdA * s.inj_N * x.P_tnk / sqrt(x.T_tnk)) * sqrt(
-                #         1.31 / (x.ox_props.Z * 188.91)) * Mcc * (1 + (0.31) / 2 * Mcc ^ 2) ^ (-2.31 / 0.62);
-                # else
-                #     x.mdot_o = s.inj_CdA * s.inj_N * sqrt(2 * x.ox_props.rho_l * dP);
-                # end
                 if state.get_mass_liquid_new() == 0:
-                    state.set_mass_flow_output(0) # TODO write the math lol
+                    state.set_mass_flow_output(simulation.inj_CdA * simulation.inj_N *
+                       (self.get_tank_pressure(state) / math.sqrt(self.get_tank_temperature(state))) *
+                       math.sqrt(self.get_oxidizer().SPECIFIC_HEAT_RATIO /
+                          (self.get_oxidizer().get_saturated_vapor_compressibility_factor(state) *
+                          self.get_oxidizer().GAS_CONSTANT)
+                       ) * self.get_mass_combustion_chamber(state) * (1 +
+                          (self.get_oxidizer().SPECIFIC_HEAT_RATIO - 1) /
+                          (2 * self.get_mass_combustion_chamber(state) * self.get_pressure_change())
+                       )
+                    )
                 else:
-                    state.set_mass_flow_output(0) # TODO write the math lol
-                self.set_mass_discharge_rate((state.get_mass_flow_output() + state.get_mass_flow_vent()) * simulation.get_time_delta())
+                    state.set_mass_flow_output(simulation.inj_CdA * simulation.inj_N *
+                     math.sqrt(2 * self.get_oxidizer().get_saturated_density_liquid(self, state)))
+                self.set_mass_discharge_rate((state.get_mass_flow_output() + state.get_mass_flow_vent()) *
+                     simulation.get_time_delta())
             elif self.get_vent_state(state) == state.VentState.VENT_STATE_ONE:
                 # # 1.31 is the specific heat ratio of nitrous oxide and 188.91 is the gas constant for nitrous. The 0.31 is just 1.31-1 or gamma-1 which is a fairly common term in the thermo models, 2.31 is the same just gamma+1. 0.62 is I believe 2*gamma-2.
                 # x.mdot_v = (s.vnt_CdA * x.P_tnk / sqrt(x.T_tnk)) * sqrt(1.31 / (x.ox_props.Z * 188.91)) * Matm * (
@@ -162,86 +164,90 @@ class OxidizerTank:
         state.set_mass_discharged((state.get_mass_discharged() - state.get_mass_discharge_flow()) * simulation.get_time_delta())
         return mass_discharged_old, state.get_mass_discharged()  # (m_out_old, mass out new)
 
-    # TODO I need to figure out what is being given by tank.m
-    # It looks like LNOX evaporation information
-
-    """
-if x.mLiq_new < x.mLiq_old && x.mLiq_new > 0 && x.mdot_o > 0
-
-    %Find mass of liquid nitrous evaporated during time step
-        x.mLiq_old = x.mLiq_new - mD;
-        [x.ox_props] = NOX(x.T_tnk);
-        x.mLiq_new = (s.tnk_V - (x.m_o/x.ox_props.rho_v))/ ...
-                    ((1/x.ox_props.rho_l)-(1/x.ox_props.rho_v));
-        mv = x.mLiq_old - x.mLiq_new;
-
-    %Find heat removed from liquid
-        dT = -mv*x.ox_props.Hv/(x.mLiq_new*x.ox_props.Cp);
-        x.T_tnk = x.T_tnk + dT;
-        [op] = NOX(x.T_tnk);
-        x.dP = op.Pv - x.P_tnk;
-
-elseif x.mLiq_new >= x.mLiq_old && x.mLiq_new > 0 && x.mdot_o > 0
-    
-    dP_avg = mean(o.dP(1:sum(o.dP<0)));
-
-    P_new = x.P_tnk + dP_avg;
-
-    vp = @(T) 7251000*exp((1/(T/309.57))*...
-        (-6.71893*(1-T/309.57) + 1.35966*(1-(T/309.57))^(3/2) + -1.3779*...
-        (1-(T/309.57))^(5/2) + -4.051*(1-(T/309.57))^5)) - P_new;
-
-    x.T_tnk = fzero(vp,x.T_tnk);
-
-    x.dP = x.ox_props.Pv - x.P_tnk;
-
-    [x.ox_props] = NOX(x.T_tnk);
-
-    x.mLiq_new = (s.tnk_V - (x.m_o/x.ox_props.rho_v))/ ...
-                    ((1/x.ox_props.rho_l)-(1/x.ox_props.rho_v));
-    x.mLiq_old = 0;
-
-elseif x.mLiq_new <= 0 && x.mdot_o > 0
-    
-    if x.mLiq_new ~= 0
-        x.mLiq_new = 0;
-    end
-
-    %Find Z factor
-
-    Z_old = x.ox_props.Z;
-
-    Zguess = Z_old;
-    epsilon = 1;
-    
-    Ti = x.T_tnk;
-    Pi = x.P_tnk;
-
-    while epsilon >= 0.000001
-
-        T_ratio = ((Zguess*x.m_o)/(Z_old*m_o_old))^(0.3);
-        x.T_tnk = T_ratio*Ti;
-        P_ratio = T_ratio^(1.3/0.3);
-        x.P_tnk = P_ratio*Pi;
-
-        [x.ox_props] = NOX(x.T_tnk);
-
-        Z = x.ox_props.Z;
-        
-        epsilon = abs(Zguess - Z);
-
-        Zguess = (Zguess + Z)/2;
-
-    end
-    
-end
-"""
-
-    def get_temperature(self, state:SimulationState):
+    def get_temperature(self, state: SimulationState):
         return state.get_tank_temperature()
 
     def get_oxidizer(self):
         return self.oxidizer
 
-    def get_tank_pressure(self, state:SimulationState):
+    def get_tank_pressure(self, state: SimulationState):
         return state.get_tank_pressure()
+
+    def get_tank_temperature(self, state):
+        return state.get_tank_temperature(state)
+
+    # TODO I need to figure out what is being given by tank.m
+    # It looks like LNOX evaporation information
+
+    """
+    if x.mLiq_new < x.mLiq_old && x.mLiq_new > 0 && x.mdot_o > 0
+    
+        %Find mass of liquid nitrous evaporated during time step
+            x.mLiq_old = x.mLiq_new - mD;
+            [x.ox_props] = NOX(x.T_tnk);
+            x.mLiq_new = (s.tnk_V - (x.m_o/x.ox_props.rho_v))/ ...
+                        ((1/x.ox_props.rho_l)-(1/x.ox_props.rho_v));
+            mv = x.mLiq_old - x.mLiq_new;
+    
+        %Find heat removed from liquid
+            dT = -mv*x.ox_props.Hv/(x.mLiq_new*x.ox_props.Cp);
+            x.T_tnk = x.T_tnk + dT;
+            [op] = NOX(x.T_tnk);
+            x.dP = op.Pv - x.P_tnk;
+    
+    elseif x.mLiq_new >= x.mLiq_old && x.mLiq_new > 0 && x.mdot_o > 0
+        
+        dP_avg = mean(o.dP(1:sum(o.dP<0)));
+    
+        P_new = x.P_tnk + dP_avg;
+    
+        vp = @(T) 7251000*exp((1/(T/309.57))*...
+            (-6.71893*(1-T/309.57) + 1.35966*(1-(T/309.57))^(3/2) + -1.3779*...
+            (1-(T/309.57))^(5/2) + -4.051*(1-(T/309.57))^5)) - P_new;
+    
+        x.T_tnk = fzero(vp,x.T_tnk);
+    
+        x.dP = x.ox_props.Pv - x.P_tnk;
+    
+        [x.ox_props] = NOX(x.T_tnk);
+    
+        x.mLiq_new = (s.tnk_V - (x.m_o/x.ox_props.rho_v))/ ...
+                        ((1/x.ox_props.rho_l)-(1/x.ox_props.rho_v));
+        x.mLiq_old = 0;
+    
+    elseif x.mLiq_new <= 0 && x.mdot_o > 0
+        
+        if x.mLiq_new ~= 0
+            x.mLiq_new = 0;
+        end
+    
+        %Find Z factor
+    
+        Z_old = x.ox_props.Z;
+    
+        Zguess = Z_old;
+        epsilon = 1;
+        
+        Ti = x.T_tnk;
+        Pi = x.P_tnk;
+    
+        while epsilon >= 0.000001
+    
+            T_ratio = ((Zguess*x.m_o)/(Z_old*m_o_old))^(0.3);
+            x.T_tnk = T_ratio*Ti;
+            P_ratio = T_ratio^(1.3/0.3);
+            x.P_tnk = P_ratio*Pi;
+    
+            [x.ox_props] = NOX(x.T_tnk);
+    
+            Z = x.ox_props.Z;
+            
+            epsilon = abs(Zguess - Z);
+    
+            Zguess = (Zguess + Z)/2;
+    
+        end
+        
+    end
+    """
+
